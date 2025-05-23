@@ -1,0 +1,117 @@
+name: agent
+services:
+  mysql:
+    container_name: mysql
+    image: mysql:8.0
+    restart: always
+    networks:
+      - agent_network
+    ports:
+      - "3305:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=123456
+      - MYSQL_DATABASE=agent
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./mysql/conf:/etc/mysql/conf.d
+
+  redis:
+    container_name: redis
+    image: redis:6.0-alpine
+    restart: always
+    networks:
+      - agent_network
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - /etc/localtime:/etc/localtime:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  fastapi:
+    container_name: fastapi
+    image: agent_api:v1.0
+    restart: always
+    networks:
+      - agent_network
+    ports:
+      - "8000:8000"
+    environment:
+      - http_proxy=http://host.docker.internal:7890
+      - LANGCHAIN_TRACING_V2=true
+      - LANGCHAIN_API_KEY=              # LangSmith的APIKey填写
+      - E2B_API_KEY=                    # E2B的APIKey填写
+      - TAVILY_API_KEY=                 # TAVILY工具APIKey填写
+      - OPENAI_API_KEY=                 # OpenAPI的APIKey填写，可以是其它大模型，如qwen，deepseek的APIKey，这里我推荐阿里的qwen模型，对中文好用，也支持function calling
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=123456
+      - DB_NAME=agent
+      - EMAIL_HOST_USER=                # 邮箱账号填写
+      - EMAIL_FROM=                     # 邮箱账号填写
+      - EMAIL_HOST_PASSWORD=            # 邮箱密钥填写
+      - REDIS_CACHE_URL=redis://redis:6379/0
+      - CELERY_BACKEND=redis://redis:6379/1
+      - CELERY_BROKER=redis://redis:6379/2
+    depends_on:
+      - mysql
+    command: >
+      sh -c "
+        cd /agent &&
+        sleep 5 &&
+        aerich init -t settings.orm &&
+        aerich init-db &&
+        aerich migrate &&
+        aerich upgrade &&
+        uvicorn main:app --host 0.0.0.0 --port 8000
+      "
+  celery_worker_1:
+    container_name: celery_worker_1
+    image: agent_api:v1.0
+    restart: always
+    networks:
+      - agent_network
+    environment:
+      - http_proxy=http://host.docker.internal:7890
+      - LANGCHAIN_TRACING_V2=true
+      - LANGCHAIN_API_KEY=              # LangSmith的APIKey填写
+      - E2B_API_KEY=                    # E2B的APIKey填写
+      - TAVILY_API_KEY=                 # TAVILY工具APIKey填写
+      - OPENAI_API_KEY=                 # OpenAPI的APIKey填写，可以是其它大模型，如qwen，deepseek的APIKey
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_PASSWORD=123456
+      - DB_NAME=agent
+      - EMAIL_HOST_USER=                # 邮箱账号填写
+      - EMAIL_FROM=                     # 邮箱账号填写
+      - EMAIL_HOST_PASSWORD=            # 邮箱密钥填写
+      - REDIS_CACHE_URL=redis://redis:6379/0
+      - CELERY_BACKEND=redis://redis:6379/1
+      - CELERY_BROKER=redis://redis:6379/2
+    command: >
+      sh -c "
+        cd /agent &&
+        sleep 15 &&
+        celery -A celery_task worker -l info  -n worker1.%h -P eventlet --concurrency=20 --max-tasks-per-child=20
+      "
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+    depends_on:
+      - redis
+      - fastapi
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  agent_network:

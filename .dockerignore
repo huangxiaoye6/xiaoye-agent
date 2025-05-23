@@ -1,0 +1,21 @@
+.env
+
+.gitignore
+
+compose.yaml
+
+pyproject.toml
+
+poetry.lock
+
+README.md
+
+migrations
+
+**/ .git
+
+.idea
+
+**/__pycache__
+
+real_compose.yaml

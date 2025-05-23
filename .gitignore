@@ -1,0 +1,15 @@
+.env
+
+_media/ai_charts/
+
+_media/uploadFile/
+
+.idea
+
+migrations/
+
+**/__pycache__
+
+real_compose.yaml
+
+
