@@ -19,3 +19,6 @@ migrations
 **/__pycache__
 
 real_compose.yaml
+
+docs
+
